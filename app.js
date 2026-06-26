@@ -729,23 +729,60 @@ function formatCurrencyShort(num) {
 }
 
 // ===== Demo Data =====
-function runDemoAnalysis() {
-  const demoData = {
-    "data": { "companyName": "Nextera Technologies Inc.", "reportYear": "2024", "revenue": 48200000000, "netIncome": 7840000000, "grossProfit": 21690000000, "operatingIncome": 12050000000, "ebitda": 15700000000, "totalAssets": 132500000000, "totalLiabilities": 85200000000, "totalEquity": 47300000000, "currentAssets": 24800000000, "currentLiabilities": 18600000000, "totalDebt": 42100000000, "cashFlow": 11200000000, "eps": 15.82 },
-    "ratios": {
-      "roe": { "name": "Return on Equity (ROE)", "value": "16.58%", "rawValue": 16.58, "barPercent": 55, "status": "good", "interpretation": "Strong returns for shareholders." },
-      "debtToEquity": { "name": "Debt-to-Equity Ratio", "value": "1.80x", "rawValue": 1.8, "barPercent": 60, "status": "fair", "interpretation": "Moderate leverage." },
-      "currentRatio": { "name": "Current Ratio", "value": "1.33x", "rawValue": 1.33, "barPercent": 44, "status": "fair", "interpretation": "Adequate short-term liquidity." },
-      "netProfitMargin": { "name": "Net Profit Margin", "value": "16.27%", "rawValue": 16.27, "barPercent": 65, "status": "good", "interpretation": "Excellent profitability margins." }
+function runDemoAnalysis(type = 'tech') {
+  const demos = {
+    'tech': {
+      "data": { "companyName": "Nextera Technologies Inc.", "reportYear": "2024", "revenue": 48200000000, "netIncome": 7840000000, "grossProfit": 21690000000, "operatingIncome": 12050000000, "ebitda": 15700000000, "totalAssets": 132500000000, "totalLiabilities": 85200000000, "totalEquity": 47300000000, "currentAssets": 24800000000, "currentLiabilities": 18600000000, "totalDebt": 42100000000, "cashFlow": 11200000000, "eps": 15.82 },
+      "ratios": {
+        "roe": { "name": "Return on Equity (ROE)", "value": "16.58%", "rawValue": 16.58, "barPercent": 55, "status": "good", "interpretation": "Strong returns for shareholders." },
+        "debtToEquity": { "name": "Debt-to-Equity Ratio", "value": "1.80x", "rawValue": 1.8, "barPercent": 60, "status": "fair", "interpretation": "Moderate leverage." },
+        "currentRatio": { "name": "Current Ratio", "value": "1.33x", "rawValue": 1.33, "barPercent": 44, "status": "fair", "interpretation": "Adequate short-term liquidity." },
+        "netProfitMargin": { "name": "Net Profit Margin", "value": "16.27%", "rawValue": 16.27, "barPercent": 65, "status": "good", "interpretation": "Excellent profitability margins." }
+      },
+      "risks": [
+        { "severity": "medium", "title": "Supply Chain Vulnerability", "desc": "Dependency on key semiconductor suppliers." }
+      ],
+      "insights": [
+        { "type": "positive", "icon": "🚀", "text": "<strong>Revenue Growth:</strong> Top-line performance is exceptional." }
+      ],
+      "healthStatus": "good", "healthLabel": "Strong Financial Health", "summary": "Nextera Technologies Inc. (2024) demonstrates robust financial health with $48.2 Billion in revenue."
     },
-    "risks": [
-      { "severity": "medium", "title": "Supply Chain Vulnerability", "desc": "Dependency on key semiconductor suppliers." }
-    ],
-    "insights": [
-      { "type": "positive", "icon": "🚀", "text": "<strong>Revenue Growth:</strong> Top-line performance is exceptional." }
-    ],
-    "healthStatus": "good", "healthLabel": "Strong Financial Health", "summary": "Nextera Technologies Inc. (2024) demonstrates robust financial health with $48.2 Billion in revenue."
+    'retail': {
+      "data": { "companyName": "OmniMart Corp", "reportYear": "2024", "revenue": 142000000000, "netIncome": 1200000000, "grossProfit": 35000000000, "operatingIncome": 3100000000, "ebitda": 5800000000, "totalAssets": 89000000000, "totalLiabilities": 75000000000, "totalEquity": 14000000000, "currentAssets": 21000000000, "currentLiabilities": 26000000000, "totalDebt": 45000000000, "cashFlow": 4200000000, "eps": 1.45 },
+      "ratios": {
+        "roe": { "name": "Return on Equity (ROE)", "value": "8.57%", "rawValue": 8.57, "barPercent": 28, "status": "fair", "interpretation": "Moderate returns on a thin equity base." },
+        "debtToEquity": { "name": "Debt-to-Equity Ratio", "value": "5.36x", "rawValue": 5.36, "barPercent": 100, "status": "poor", "interpretation": "Highly leveraged capital structure." },
+        "currentRatio": { "name": "Current Ratio", "value": "0.81x", "rawValue": 0.81, "barPercent": 27, "status": "poor", "interpretation": "Working capital deficit indicates liquidity pressure." },
+        "netProfitMargin": { "name": "Net Profit Margin", "value": "0.85%", "rawValue": 0.85, "barPercent": 3, "status": "poor", "interpretation": "Razor-thin margins typical of discount retail." }
+      },
+      "risks": [
+        { "severity": "high", "title": "Liquidity Risk", "desc": "Current liabilities exceed current assets by $5B." },
+        { "severity": "high", "title": "High Leverage", "desc": "Significant debt burden relative to equity." }
+      ],
+      "insights": [
+        { "type": "negative", "icon": "⚠️", "text": "<strong>Margin Compression:</strong> Net margins have fallen below 1%." }
+      ],
+      "healthStatus": "poor", "healthLabel": "Weak Financial Health", "summary": "OmniMart Corp is struggling with significant debt and liquidity constraints, despite massive $142B top-line revenue."
+    },
+    'energy': {
+      "data": { "companyName": "EcoPower Utilities", "reportYear": "2024", "revenue": 18500000000, "netIncome": 2100000000, "grossProfit": 8500000000, "operatingIncome": 3800000000, "ebitda": 6200000000, "totalAssets": 95000000000, "totalLiabilities": 62000000000, "totalEquity": 33000000000, "currentAssets": 8500000000, "currentLiabilities": 9200000000, "totalDebt": 48000000000, "cashFlow": 5500000000, "eps": 4.20 },
+      "ratios": {
+        "roe": { "name": "Return on Equity (ROE)", "value": "6.36%", "rawValue": 6.36, "barPercent": 21, "status": "fair", "interpretation": "Stable, regulated utility returns." },
+        "debtToEquity": { "name": "Debt-to-Equity Ratio", "value": "1.88x", "rawValue": 1.88, "barPercent": 62, "status": "fair", "interpretation": "Standard leverage for asset-heavy utility." },
+        "currentRatio": { "name": "Current Ratio", "value": "0.92x", "rawValue": 0.92, "barPercent": 30, "status": "fair", "interpretation": "Slightly tight liquidity, normal for sector." },
+        "netProfitMargin": { "name": "Net Profit Margin", "value": "11.35%", "rawValue": 11.35, "barPercent": 45, "status": "good", "interpretation": "Solid profitability on recurring revenue." }
+      },
+      "risks": [
+        { "severity": "medium", "title": "Regulatory Policy", "desc": "Potential impacts from new clean energy mandates." }
+      ],
+      "insights": [
+        { "type": "positive", "icon": "💧", "text": "<strong>Cash Generation:</strong> Strong operating cash flow supports dividend." }
+      ],
+      "healthStatus": "fair", "healthLabel": "Fair Financial Health", "summary": "EcoPower Utilities remains stable with consistent 11% margins and strong cash flow, offset by significant structural debt."
+    }
   };
+  
+  const demoData = demos[type] || demos['tech'];
   
   currentAnalysis = demoData;
   saveToHistory(demoData);
