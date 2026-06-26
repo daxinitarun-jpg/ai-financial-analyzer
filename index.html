@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -32,6 +34,8 @@
       <div class="nav-links">
         <a href="#features" class="nav-link">Features</a>
         <a href="#how-it-works" class="nav-link">How It Works</a>
+        <a href="#" class="nav-link" id="nav-history">History</a>
+        <a href="#" class="nav-link" id="nav-settings">Settings</a>
       </div>
     </nav>
 
@@ -70,6 +74,16 @@
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5V9L13.5 11.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="1.5"/></svg>
         Try with Sample Report
       </button>
+    </div>
+
+    <!-- History Section -->
+    <div id="history-section" class="history-section" style="display: none;">
+      <div class="history-header">
+        <h2 class="section-title" style="margin-bottom:0">Recent Analyses</h2>
+      </div>
+      <div class="history-list" id="history-list">
+        <!-- Populated by JS -->
+      </div>
     </div>
 
     <!-- Features -->
@@ -166,6 +180,10 @@
         <span class="brand-text">FinSight<span class="brand-ai">AI</span></span>
       </div>
       <div class="dash-nav-right">
+        <button id="share-btn" class="btn btn-outline-sm" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M4 12V8C4 5.79086 5.79086 4 8 4C10.2091 4 12 5.79086 12 8V12M8 4L5 7M8 4L11 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Share
+        </button>
         <button id="new-analysis-btn" class="btn btn-outline-sm">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           New Analysis
@@ -282,6 +300,33 @@
       </footer>
     </div>
   </section>
+
+  <!-- ========== MODALS & TOASTS ========== -->
+  <div id="settings-modal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Settings & Configuration</h2>
+        <button class="modal-close" id="close-settings">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Google Gemini API Key</label>
+        <input type="password" id="gemini-api-key" class="form-input" placeholder="AIzaSy..." />
+        <p class="form-hint">Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. Saved locally.</p>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Firebase Config (JSON)</label>
+        <textarea id="firebase-config" class="form-input" rows="4" placeholder='{"apiKey": "...", "projectId": "..."}' style="resize:vertical"></textarea>
+        <p class="form-hint">Paste your Firebase config object here to enable cloud saving and sharing.</p>
+      </div>
+      <div class="modal-footer">
+        <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
 
   <script src="app.js"></script>
 </body>

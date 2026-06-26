@@ -1,7 +1,7 @@
 /**
  * FinSight AI — Financial Statement Analyzer
- * Client-side PDF parsing, financial data extraction, ratio computation,
- * risk assessment, and insight generation.
+ * Features: Client-side PDF parsing, Gemini AI Integration, Firebase Cloud Storage,
+ * fallback regex extraction, ratio computation, risk assessment, and Chart.js visualizations.
  */
 
 // ===== PDF.js Worker Setup =====
@@ -31,7 +31,23 @@ const dom = {
   riskList: document.getElementById('risk-list'),
   insightsGrid: document.getElementById('insights-grid'),
   dataTbody: document.getElementById('data-tbody'),
+  // New DOM elements
+  navSettings: document.getElementById('nav-settings'),
+  navHistory: document.getElementById('nav-history'),
+  settingsModal: document.getElementById('settings-modal'),
+  closeSettings: document.getElementById('close-settings'),
+  geminiApiKey: document.getElementById('gemini-api-key'),
+  firebaseConfig: document.getElementById('firebase-config'),
+  saveSettingsBtn: document.getElementById('save-settings-btn'),
+  toastContainer: document.getElementById('toast-container'),
+  shareBtn: document.getElementById('share-btn'),
+  historySection: document.getElementById('history-section'),
+  historyList: document.getElementById('history-list'),
 };
+
+// Global state
+let currentAnalysis = null;
+let db = null; // Firestore database instance
 
 // ===== View Switcher =====
 function showView(viewId) {
@@ -39,6 +55,193 @@ function showView(viewId) {
   document.getElementById(viewId).classList.add('active');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ===== Toast Notifications =====
+function showToast(message, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <div class="toast-icon">${type === 'success' ? '✅' : '⚠️'}</div>
+    <div class="toast-message">${message}</div>
+  `;
+  dom.toastContainer.appendChild(toast);
+  
+  // Trigger animation
+  setTimeout(() => toast.classList.add('show'), 10);
+  
+  // Remove after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ===== Settings & Config =====
+function loadSettings() {
+  const apiKey = localStorage.getItem('geminiApiKey') || '';
+  const fbConfig = localStorage.getItem('firebaseConfig') || '';
+  dom.geminiApiKey.value = apiKey;
+  dom.firebaseConfig.value = fbConfig;
+  initFirebase();
+}
+
+dom.navSettings.addEventListener('click', (e) => {
+  e.preventDefault();
+  loadSettings();
+  dom.settingsModal.classList.add('active');
+});
+
+dom.closeSettings.addEventListener('click', () => {
+  dom.settingsModal.classList.remove('active');
+});
+
+dom.saveSettingsBtn.addEventListener('click', () => {
+  localStorage.setItem('geminiApiKey', dom.geminiApiKey.value.trim());
+  localStorage.setItem('firebaseConfig', dom.firebaseConfig.value.trim());
+  dom.settingsModal.classList.remove('active');
+  showToast('Settings saved successfully!');
+  initFirebase();
+});
+
+// ===== Firebase Init & History =====
+function initFirebase() {
+  const configStr = localStorage.getItem('firebaseConfig');
+  if (!configStr) {
+    dom.shareBtn.style.display = 'none';
+    dom.historySection.style.display = 'none';
+    return;
+  }
+  
+  try {
+    const firebaseConfig = JSON.parse(configStr);
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    db = firebase.firestore();
+    dom.shareBtn.style.display = 'inline-flex';
+    loadHistory();
+  } catch (err) {
+    console.error('Firebase init error:', err);
+    showToast('Invalid Firebase config JSON', 'error');
+  }
+}
+
+async function loadHistory() {
+  if (!db) return;
+  try {
+    const snapshot = await db.collection('analyses').orderBy('createdAt', 'desc').limit(5).get();
+    if (snapshot.empty) {
+      dom.historySection.style.display = 'none';
+      return;
+    }
+    
+    dom.historySection.style.display = 'block';
+    dom.historyList.innerHTML = '';
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const date = data.createdAt ? new Date(data.createdAt.toMillis()).toLocaleDateString() : 'Unknown Date';
+      
+      const item = document.createElement('a');
+      item.className = 'history-item';
+      item.href = `?id=${doc.id}`;
+      item.innerHTML = `
+        <div class="history-item-left">
+          <div class="history-title">${data.analysis.data.companyName || 'Unknown Company'}</div>
+          <div class="history-meta">FY ${data.analysis.data.reportYear || 'Unknown'} • Analyzed on ${date}</div>
+        </div>
+        <div class="history-status" style="background: var(--${data.analysis.healthStatus === 'good' ? 'success' : data.analysis.healthStatus === 'fair' ? 'warning' : 'danger'}-bg); color: var(--${data.analysis.healthStatus === 'good' ? 'accent-1' : data.analysis.healthStatus === 'fair' ? 'warning' : 'danger'})">
+          ${data.analysis.healthLabel}
+        </div>
+      `;
+      dom.historyList.appendChild(item);
+    });
+  } catch (err) {
+    console.error('Error loading history:', err);
+  }
+}
+
+dom.navHistory.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!db) {
+    showToast('Configure Firebase in Settings to view history', 'error');
+    return;
+  }
+  dom.historySection.scrollIntoView({ behavior: 'smooth' });
+});
+
+// ===== Share Logic =====
+dom.shareBtn.addEventListener('click', async () => {
+  if (!db || !currentAnalysis) return;
+  
+  const originalText = dom.shareBtn.innerHTML;
+  dom.shareBtn.innerHTML = 'Sharing...';
+  
+  try {
+    // Check if we are already viewing a shared analysis
+    const urlParams = new URLSearchParams(window.location.search);
+    let docId = urlParams.get('id');
+    
+    if (!docId) {
+      // Save new analysis to Firestore
+      const docRef = await db.collection('analyses').add({
+        analysis: currentAnalysis,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      docId = docRef.id;
+    }
+    
+    // Generate share URL
+    const shareUrl = `${window.location.origin}${window.location.pathname}?id=${docId}`;
+    await navigator.clipboard.writeText(shareUrl);
+    showToast('Share link copied to clipboard!');
+    
+    // Update URL bar without reloading
+    window.history.pushState({}, '', `?id=${docId}`);
+  } catch (err) {
+    console.error('Share error:', err);
+    showToast('Failed to create share link', 'error');
+  } finally {
+    dom.shareBtn.innerHTML = originalText;
+  }
+});
+
+// ===== App Initialization (Check URL Params) =====
+window.addEventListener('DOMContentLoaded', async () => {
+  loadSettings();
+  
+  const urlParams = new URLSearchParams(window.location.search);
+  const id = urlParams.get('id');
+  
+  if (id) {
+    if (!db) {
+      alert("This is a shared analysis link. Please configure Firebase Settings first to view it.");
+      return;
+    }
+    
+    showView('loading-view');
+    updateLoaderStep(1, 'Loading shared analysis...', 50);
+    
+    try {
+      const doc = await db.collection('analyses').doc(id).get();
+      if (doc.exists) {
+        updateLoaderStep(5, 'Complete!', 100);
+        await delay(300);
+        
+        currentAnalysis = doc.data().analysis;
+        renderDashboard(currentAnalysis, 'Shared Report');
+      } else {
+        showToast('Shared analysis not found', 'error');
+        showView('landing-view');
+      }
+    } catch (err) {
+      console.error('Load error:', err);
+      showToast('Error loading shared analysis', 'error');
+      showView('landing-view');
+    }
+  }
+});
+
 
 // ===== Upload / Drag & Drop =====
 ['dragenter', 'dragover'].forEach(evt =>
@@ -63,6 +266,7 @@ dom.fileInput.addEventListener('change', e => {
 });
 dom.demoBtn.addEventListener('click', () => runDemoAnalysis());
 dom.newAnalysisBtn.addEventListener('click', () => {
+  window.history.pushState({}, '', window.location.pathname);
   showView('landing-view');
   dom.fileInput.value = '';
 });
@@ -78,38 +282,139 @@ async function processFile(file) {
 
     let fullText = '';
     const totalPages = pdf.numPages;
+    // Limit to first 20 pages to avoid context limits / memory issues
+    const pagesToRead = Math.min(totalPages, 20);
 
-    for (let i = 1; i <= totalPages; i++) {
+    for (let i = 1; i <= pagesToRead; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items.map(item => item.str).join(' ');
       fullText += pageText + '\n';
-      updateLoaderStep(1, `Extracting text... Page ${i}/${totalPages}`, 10 + (30 * i / totalPages));
+      updateLoaderStep(1, `Extracting text... Page ${i}/${pagesToRead}`, 10 + (30 * i / pagesToRead));
     }
 
-    updateLoaderStep(2, 'Recognizing financial data...', 45);
-    await delay(500);
-
-    updateLoaderStep(3, 'Computing financial ratios...', 60);
-    await delay(400);
-
-    const financials = extractFinancials(fullText);
-
-    updateLoaderStep(4, 'Assessing risks...', 75);
-    await delay(400);
-
-    const analysis = analyzeFinancials(financials, fullText);
-
+    updateLoaderStep(2, 'Analyzing with AI...', 45);
+    
+    // Check if Gemini API key is available
+    const apiKey = localStorage.getItem('geminiApiKey');
+    let analysis;
+    
+    if (apiKey) {
+      try {
+        analysis = await analyzeWithGemini(fullText, apiKey, file.name);
+      } catch (err) {
+        console.error('Gemini API error, falling back to regex:', err);
+        showToast('AI analysis failed. Using offline regex fallback.', 'warning');
+        const data = extractFinancials(fullText);
+        analysis = analyzeFinancials(data, fullText, file.name);
+      }
+    } else {
+      showToast('No Gemini API key found. Using offline regex fallback.', 'warning');
+      const data = extractFinancials(fullText);
+      analysis = analyzeFinancials(data, fullText, file.name);
+    }
+    
     updateLoaderStep(5, 'Generating report...', 90);
-    await delay(500);
+    await delay(300);
 
     updateLoaderStep(5, 'Complete!', 100);
     await delay(300);
 
+    currentAnalysis = analysis;
     renderDashboard(analysis, file.name);
   } catch (err) {
     console.error('Processing error:', err);
     dom.loaderStatus.textContent = 'Error processing file. Please try another PDF.';
+  }
+}
+
+// ===== Gemini AI Integration =====
+async function analyzeWithGemini(text, apiKey, fileName) {
+  // Truncate text to avoid token limits (keep first ~30k chars)
+  const truncatedText = text.substring(0, 30000);
+  
+  const systemPrompt = `You are an expert financial analyst AI. Extract financial data, compute key ratios, identify risks, and generate insights from the provided annual report text. Return ONLY a valid JSON object matching the exact structure requested, with no markdown formatting or markdown code blocks (do not wrap in \`\`\`json).`;
+  
+  const userPrompt = `
+  Analyze this financial report text:
+  ---
+  ${truncatedText}
+  ---
+  
+  Extract the following and return ONLY a raw JSON object (do not wrap in markdown):
+  {
+    "data": {
+      "companyName": "extracted or guess from filename ${fileName}",
+      "reportYear": "e.g., 2024",
+      "revenue": numeric_value_in_absolute_dollars_or_null,
+      "netIncome": numeric_or_null,
+      "grossProfit": numeric_or_null,
+      "operatingIncome": numeric_or_null,
+      "ebitda": numeric_or_null,
+      "totalAssets": numeric_or_null,
+      "totalLiabilities": numeric_or_null,
+      "totalEquity": numeric_or_null,
+      "currentAssets": numeric_or_null,
+      "currentLiabilities": numeric_or_null,
+      "totalDebt": numeric_or_null,
+      "cashFlow": numeric_or_null,
+      "eps": numeric_or_null
+    },
+    "ratios": {
+      "roe": { "name": "Return on Equity (ROE)", "value": "12.5%", "rawValue": 12.5, "barPercent": 40, "status": "good/fair/poor", "interpretation": "short sentence" },
+      "roa": { "name": "Return on Assets (ROA)", "value": "5.2%", "rawValue": 5.2, "barPercent": 35, "status": "good/fair/poor", "interpretation": "short sentence" },
+      "debtToEquity": { "name": "Debt-to-Equity Ratio", "value": "1.2x", "rawValue": 1.2, "barPercent": 40, "status": "good/fair/poor", "interpretation": "short sentence" },
+      "currentRatio": { "name": "Current Ratio", "value": "1.5x", "rawValue": 1.5, "barPercent": 50, "status": "good/fair/poor", "interpretation": "short sentence" },
+      "netProfitMargin": { "name": "Net Profit Margin", "value": "8.4%", "rawValue": 8.4, "barPercent": 33, "status": "good/fair/poor", "interpretation": "short sentence" }
+    },
+    "risks": [
+      { "severity": "high/medium/low", "title": "Risk Title", "desc": "Short description" }
+    ],
+    "insights": [
+      { "type": "positive/negative/neutral", "icon": "emoji", "text": "<strong>Topic:</strong> Insight description." }
+    ],
+    "healthStatus": "good/fair/poor",
+    "healthLabel": "Strong/Fair/Weak Financial Health",
+    "summary": "Executive summary paragraph."
+  }
+  
+  Notes:
+  - If a metric is completely absent, omit it from "data".
+  - Compute ratios based on extracted data. For barPercent, 0-100 scale representing how good the metric is relative to standard benchmarks.
+  - Extract 2-4 key risks from text (e.g. liquidity, litigation, macro conditions).
+  - Provide 4-5 key insights highlighting strengths or weaknesses.
+  `;
+
+  updateLoaderStep(3, 'Gemini AI is analyzing financials...', 60);
+
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: userPrompt }] }],
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json"
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API error: ${response.status}`);
+  }
+
+  const result = await response.json();
+  const rawResponse = result.candidates[0].content.parts[0].text;
+  
+  updateLoaderStep(4, 'Formatting AI insights...', 80);
+  
+  try {
+    return JSON.parse(rawResponse);
+  } catch (e) {
+    // Try to strip markdown if the model hallucinated it despite instructions
+    const cleaned = rawResponse.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(cleaned);
   }
 }
 
@@ -128,7 +433,7 @@ function updateLoaderStep(step, status, progress) {
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// ===== Financial Data Extraction =====
+// ===== Offline Regex Fallback Extraction =====
 function extractFinancials(text) {
   const t = text.replace(/,/g, '').replace(/\s+/g, ' ');
   const data = {};
@@ -141,8 +446,6 @@ function extractFinancials(text) {
     ],
     netIncome: [
       /net\s+(?:income|profit|earnings)\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
-      /profit\s+after\s+tax\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
-      /PAT\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
     ],
     totalAssets: [
       /total\s+assets\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
@@ -152,7 +455,6 @@ function extractFinancials(text) {
     ],
     totalEquity: [
       /(?:total\s+)?(?:shareholders?\s*['']?s?\s+)?equity\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
-      /(?:total\s+)?(?:stockholders?\s*['']?s?\s+)?equity\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
     ],
     currentAssets: [
       /current\s+assets\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
@@ -162,7 +464,6 @@ function extractFinancials(text) {
     ],
     operatingIncome: [
       /operating\s+(?:income|profit)\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
-      /EBIT\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
     ],
     ebitda: [
       /EBITDA\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
@@ -172,7 +473,6 @@ function extractFinancials(text) {
     ],
     totalDebt: [
       /total\s+(?:long[\s-]term\s+)?debt\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
-      /borrowings?\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
     ],
     cashFlow: [
       /(?:net\s+)?cash\s+(?:from|provided\s+by)\s+operat(?:ing|ions)\s*[\$₹€£]?\s*(\d+[\.\d]*)\s*(billion|million|crore|lakh|mn|bn|cr|m|b)?/i,
@@ -205,29 +505,27 @@ function extractFinancials(text) {
     }
   }
 
-  // Derive equity if not found
   if (!data.totalEquity && data.totalAssets && data.totalLiabilities) {
     data.totalEquity = data.totalAssets - data.totalLiabilities;
   }
-
-  // Try to extract company name
+  
   const nameMatch = text.match(/(?:annual\s+report\s+(?:of\s+)?|welcome\s+to\s+)([A-Z][A-Za-z\s&.,]+?)(?:\s+(?:Ltd|Inc|Corp|Limited|PLC|LLC|Co\.))/i);
   data.companyName = nameMatch ? nameMatch[1].trim() : null;
-
-  // Try to extract year
+  
   const yearMatch = text.match(/(?:FY|fiscal\s+year|annual\s+report)\s*['"]?\s*(20[0-9]{2})/i) || text.match(/(20[2-9][0-9])/);
   data.reportYear = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
 
   return data;
 }
 
-// ===== Financial Analysis Engine =====
-function analyzeFinancials(data, rawText) {
+function analyzeFinancials(data, rawText, fileName) {
+  if (!data.companyName && fileName) data.companyName = fileName.replace('.pdf', '');
+  
   const ratios = {};
   const risks = [];
   const insights = [];
 
-  // ----- Compute Ratios -----
+  // Computed Ratios 
   if (data.netIncome && data.totalEquity && data.totalEquity > 0) {
     ratios.roe = {
       name: 'Return on Equity (ROE)',
@@ -235,17 +533,7 @@ function analyzeFinancials(data, rawText) {
       rawValue: data.netIncome / data.totalEquity * 100,
       barPercent: Math.min((data.netIncome / data.totalEquity * 100) / 30 * 100, 100),
       status: data.netIncome / data.totalEquity > 0.15 ? 'good' : data.netIncome / data.totalEquity > 0.08 ? 'fair' : 'poor',
-      interpretation: data.netIncome / data.totalEquity > 0.15 ? 'Strong — generating excellent returns for shareholders' : data.netIncome / data.totalEquity > 0.08 ? 'Adequate — returns are reasonable' : 'Weak — below-average returns on shareholder investment',
-    };
-  }
-  if (data.netIncome && data.totalAssets && data.totalAssets > 0) {
-    ratios.roa = {
-      name: 'Return on Assets (ROA)',
-      value: (data.netIncome / data.totalAssets * 100).toFixed(2) + '%',
-      rawValue: data.netIncome / data.totalAssets * 100,
-      barPercent: Math.min((data.netIncome / data.totalAssets * 100) / 15 * 100, 100),
-      status: data.netIncome / data.totalAssets > 0.08 ? 'good' : data.netIncome / data.totalAssets > 0.03 ? 'fair' : 'poor',
-      interpretation: data.netIncome / data.totalAssets > 0.08 ? 'Efficient asset utilization driving strong profitability' : 'Assets are being utilized at an average efficiency level',
+      interpretation: data.netIncome / data.totalEquity > 0.15 ? 'Strong returns for shareholders' : 'Adequate returns',
     };
   }
   if (data.totalLiabilities && data.totalEquity && data.totalEquity > 0) {
@@ -256,10 +544,8 @@ function analyzeFinancials(data, rawText) {
       rawValue: de,
       barPercent: Math.min(de / 3 * 100, 100),
       status: de < 1 ? 'good' : de < 2 ? 'fair' : 'poor',
-      interpretation: de < 1 ? 'Conservative leverage — well-balanced capital structure' : de < 2 ? 'Moderate leverage — manageable but warrants monitoring' : 'High leverage — potential financial stress risk',
+      interpretation: de < 1 ? 'Conservative leverage' : de < 2 ? 'Moderate leverage' : 'High leverage risk',
     };
-    if (de >= 2) risks.push({ severity: 'high', title: 'High Leverage', desc: `Debt-to-Equity ratio of ${de.toFixed(2)}x indicates the company is heavily reliant on debt financing, which could amplify losses during downturns.` });
-    else if (de >= 1.5) risks.push({ severity: 'medium', title: 'Elevated Debt Levels', desc: `Debt-to-Equity ratio of ${de.toFixed(2)}x is above the comfortable range. Monitor interest coverage closely.` });
   }
   if (data.currentAssets && data.currentLiabilities && data.currentLiabilities > 0) {
     const cr = data.currentAssets / data.currentLiabilities;
@@ -269,10 +555,8 @@ function analyzeFinancials(data, rawText) {
       rawValue: cr,
       barPercent: Math.min(cr / 3 * 100, 100),
       status: cr >= 1.5 ? 'good' : cr >= 1 ? 'fair' : 'poor',
-      interpretation: cr >= 1.5 ? 'Healthy liquidity — strong ability to meet short-term obligations' : cr >= 1 ? 'Adequate liquidity — just able to cover current liabilities' : 'Poor liquidity — may struggle to meet short-term obligations',
+      interpretation: cr >= 1.5 ? 'Healthy short-term liquidity' : 'Tight liquidity',
     };
-    if (cr < 1) risks.push({ severity: 'high', title: 'Liquidity Concern', desc: `Current ratio of ${cr.toFixed(2)}x is below 1, indicating the company may not have enough liquid assets to cover short-term obligations.` });
-    else if (cr < 1.2) risks.push({ severity: 'medium', title: 'Tight Liquidity', desc: `Current ratio of ${cr.toFixed(2)}x is barely above 1. Short-term cash management requires careful attention.` });
   }
   if (data.netIncome && data.revenue && data.revenue > 0) {
     const npm = data.netIncome / data.revenue * 100;
@@ -282,129 +566,36 @@ function analyzeFinancials(data, rawText) {
       rawValue: npm,
       barPercent: Math.min(npm / 25 * 100, 100),
       status: npm > 15 ? 'good' : npm > 5 ? 'fair' : 'poor',
-      interpretation: npm > 15 ? 'Excellent margins reflecting strong cost control and pricing power' : npm > 5 ? 'Moderate margins — room for operational efficiency improvements' : 'Thin margins — vulnerable to cost increases',
-    };
-    if (npm < 3) risks.push({ severity: 'high', title: 'Razor-Thin Margins', desc: `Net profit margin of only ${npm.toFixed(1)}% leaves little buffer against cost increases or revenue declines.` });
-  }
-  if (data.grossProfit && data.revenue && data.revenue > 0) {
-    const gpm = data.grossProfit / data.revenue * 100;
-    ratios.grossProfitMargin = {
-      name: 'Gross Profit Margin',
-      value: gpm.toFixed(2) + '%',
-      rawValue: gpm,
-      barPercent: Math.min(gpm / 60 * 100, 100),
-      status: gpm > 40 ? 'good' : gpm > 20 ? 'fair' : 'poor',
-      interpretation: gpm > 40 ? 'Strong gross margins indicative of pricing power or efficient production' : 'Moderate gross margins — common in competitive or capital-intensive industries',
+      interpretation: npm > 15 ? 'Excellent margins' : 'Moderate margins',
     };
   }
-  if (data.operatingIncome && data.revenue && data.revenue > 0) {
-    const opm = data.operatingIncome / data.revenue * 100;
-    ratios.operatingMargin = {
-      name: 'Operating Margin',
-      value: opm.toFixed(2) + '%',
-      rawValue: opm,
-      barPercent: Math.min(opm / 30 * 100, 100),
-      status: opm > 15 ? 'good' : opm > 5 ? 'fair' : 'poor',
-      interpretation: opm > 15 ? 'Healthy operating efficiency with strong core business performance' : 'Moderate operating performance — operational improvements could boost margins',
-    };
-  }
-  if (data.totalDebt && data.totalEquity && data.totalEquity > 0) {
-    const dte = data.totalDebt / data.totalEquity;
-    if (!ratios.debtToEquity) {
-      ratios.debtToEquity = {
-        name: 'Debt-to-Equity Ratio',
-        value: dte.toFixed(2) + 'x',
-        rawValue: dte,
-        barPercent: Math.min(dte / 3 * 100, 100),
-        status: dte < 1 ? 'good' : dte < 2 ? 'fair' : 'poor',
-        interpretation: dte < 1 ? 'Conservative leverage' : 'Elevated leverage levels',
-      };
-    }
-  }
 
-  // ----- Generate Insights -----
-  if (data.revenue) {
-    insights.push({ type: 'neutral', icon: '📊', text: `<strong>Revenue</strong> stands at ${formatCurrency(data.revenue)}, representing the company's top-line performance from core business operations.` });
-  }
-  if (data.netIncome && data.revenue) {
-    const margin = (data.netIncome / data.revenue * 100).toFixed(1);
-    const type = margin > 10 ? 'positive' : margin > 0 ? 'neutral' : 'negative';
-    insights.push({ type, icon: type === 'positive' ? '✅' : type === 'negative' ? '🔻' : '📈', text: `<strong>Profitability:</strong> The company retains ${margin}% of revenue as net profit. ${margin > 10 ? 'This indicates strong pricing power and operational efficiency.' : margin > 0 ? 'Moderate profitability with room for improvement.' : 'The company is currently unprofitable — immediate attention needed.'}` });
-  }
-  if (data.totalAssets && data.totalLiabilities) {
-    const assetCoverage = ((data.totalAssets - data.totalLiabilities) / data.totalAssets * 100).toFixed(1);
-    insights.push({ type: assetCoverage > 40 ? 'positive' : 'neutral', icon: assetCoverage > 40 ? '🏛️' : '📋', text: `<strong>Balance Sheet Health:</strong> ${assetCoverage}% of total assets are funded by equity, indicating a ${assetCoverage > 40 ? 'strong' : 'moderate'} financial foundation.` });
-  }
-  if (data.ebitda && data.revenue) {
-    const ebitdaMargin = (data.ebitda / data.revenue * 100).toFixed(1);
-    insights.push({ type: ebitdaMargin > 20 ? 'positive' : 'neutral', icon: '⚡', text: `<strong>EBITDA Margin:</strong> ${ebitdaMargin}% — measures core operational cash generation before financing and accounting decisions.` });
-  }
-  if (data.cashFlow) {
-    insights.push({ type: data.cashFlow > 0 ? 'positive' : 'negative', icon: data.cashFlow > 0 ? '💵' : '🔻', text: `<strong>Operating Cash Flow:</strong> ${formatCurrency(data.cashFlow)} — ${data.cashFlow > 0 ? 'positive cash generation supports business sustainability and growth investments' : 'negative operating cash flow raises concerns about business sustainability'}.` });
-  }
-  if (data.eps) {
-    insights.push({ type: data.eps > 0 ? 'positive' : 'negative', icon: '📈', text: `<strong>Earnings Per Share:</strong> $${data.eps.toFixed(2)} — ${data.eps > 0 ? 'the company is generating positive per-share returns' : 'negative EPS indicates losses being passed to shareholders'}.` });
-  }
+  // Insight Gen
+  if (data.revenue) insights.push({ type: 'neutral', icon: '📊', text: `<strong>Revenue</strong> is ${formatCurrency(data.revenue)}.` });
+  if (data.netIncome && data.revenue) insights.push({ type: data.netIncome > 0 ? 'positive' : 'negative', icon: data.netIncome > 0 ? '✅' : '🔻', text: `<strong>Profitability:</strong> Retains ${(data.netIncome / data.revenue * 100).toFixed(1)}% of revenue as profit.` });
 
-  // Additional text-based risk detection
-  const riskKeywords = [
-    { pattern: /going concern/i, title: 'Going Concern Warning', desc: 'The report mentions "going concern" language, suggesting auditors have flagged doubts about the company\'s ability to continue operating.', severity: 'high' },
-    { pattern: /material weakness/i, title: 'Internal Control Weakness', desc: 'A "material weakness" in internal controls has been identified, indicating significant risk of financial misstatement.', severity: 'high' },
-    { pattern: /litigation|lawsuit|legal proceedings/i, title: 'Pending Litigation', desc: 'The report references ongoing legal proceedings that could result in material financial impact.', severity: 'medium' },
-    { pattern: /regulatory\s+risk|compliance\s+risk/i, title: 'Regulatory Risk', desc: 'Regulatory and compliance risks are mentioned, which could affect operations and profitability.', severity: 'medium' },
-    { pattern: /foreign\s+(?:currency|exchange)\s+risk/i, title: 'Currency Risk', desc: 'Exposure to foreign exchange fluctuations could impact reported earnings and asset values.', severity: 'low' },
-    { pattern: /supply\s+chain\s+(?:disruption|risk)/i, title: 'Supply Chain Risk', desc: 'Supply chain vulnerabilities are identified that could affect production and revenue.', severity: 'medium' },
-    { pattern: /climate\s+risk|environmental\s+risk/i, title: 'Environmental Risk', desc: 'Climate and environmental risks could lead to regulatory costs, asset impairments, or operational disruptions.', severity: 'low' },
-    { pattern: /cybersecurity|data\s+breach/i, title: 'Cybersecurity Risk', desc: 'Cybersecurity threats are acknowledged, with potential for data breaches and associated costs.', severity: 'medium' },
-  ];
-  riskKeywords.forEach(rk => {
-    if (rk.pattern.test(rawText)) {
-      risks.push({ severity: rk.severity, title: rk.title, desc: rk.desc });
-    }
-  });
-
-  if (risks.length === 0) {
-    risks.push({ severity: 'low', title: 'No Major Red Flags Detected', desc: 'The AI analysis did not detect critical risk indicators in the document text. However, always cross-reference with professional due diligence.' });
+  // Fallback Risk Detection
+  if (data.totalLiabilities && data.totalEquity && data.totalLiabilities / data.totalEquity >= 2) {
+    risks.push({ severity: 'high', title: 'High Leverage', desc: 'Debt-to-Equity ratio indicates heavy reliance on debt financing.' });
   }
+  if (data.currentAssets && data.currentLiabilities && data.currentAssets / data.currentLiabilities < 1) {
+    risks.push({ severity: 'high', title: 'Liquidity Concern', desc: 'Current ratio is below 1, indicating potential struggle with short-term obligations.' });
+  }
+  if (risks.length === 0) risks.push({ severity: 'low', title: 'No Major Quantitative Risks Detected', desc: 'Financial ratios appear within acceptable bounds.' });
 
   // Health score
-  let healthScore = 0;
-  let healthFactors = 0;
+  let healthScore = 0, healthFactors = 0;
   if (ratios.roe) { healthScore += ratios.roe.status === 'good' ? 3 : ratios.roe.status === 'fair' ? 2 : 1; healthFactors++; }
   if (ratios.currentRatio) { healthScore += ratios.currentRatio.status === 'good' ? 3 : ratios.currentRatio.status === 'fair' ? 2 : 1; healthFactors++; }
-  if (ratios.debtToEquity) { healthScore += ratios.debtToEquity.status === 'good' ? 3 : ratios.debtToEquity.status === 'fair' ? 2 : 1; healthFactors++; }
-  if (ratios.netProfitMargin) { healthScore += ratios.netProfitMargin.status === 'good' ? 3 : ratios.netProfitMargin.status === 'fair' ? 2 : 1; healthFactors++; }
-
+  
   const avgHealth = healthFactors > 0 ? healthScore / healthFactors : 2;
   const healthStatus = avgHealth >= 2.5 ? 'good' : avgHealth >= 1.8 ? 'fair' : 'poor';
-  const healthLabelText = avgHealth >= 2.5 ? 'Strong Financial Health' : avgHealth >= 1.8 ? 'Fair Financial Health' : 'Weak Financial Health';
-
-  // Executive summary
-  let summary = `Based on AI analysis of the uploaded annual report`;
-  if (data.companyName) summary += ` of ${data.companyName}`;
-  summary += ` (${data.reportYear}), `;
-
-  if (data.revenue) summary += `the company generated revenue of ${formatCurrency(data.revenue)}`;
-  if (data.netIncome) summary += ` with a net income of ${formatCurrency(data.netIncome)}`;
-  summary += '. ';
-
-  if (ratios.netProfitMargin) summary += `Net profit margin is ${ratios.netProfitMargin.value}. `;
-  if (ratios.roe) summary += `Return on equity stands at ${ratios.roe.value}, which is ${ratios.roe.status === 'good' ? 'above industry average' : 'within normal range'}. `;
-  if (ratios.debtToEquity) summary += `The debt-to-equity ratio of ${ratios.debtToEquity.value} indicates ${ratios.debtToEquity.status === 'good' ? 'conservative' : ratios.debtToEquity.status === 'fair' ? 'moderate' : 'aggressive'} use of leverage. `;
-  if (ratios.currentRatio) summary += `Liquidity position (current ratio: ${ratios.currentRatio.value}) is ${ratios.currentRatio.status === 'good' ? 'healthy' : 'manageable'}. `;
-
-  const highRisks = risks.filter(r => r.severity === 'high').length;
-  if (highRisks > 0) summary += `⚠️ ${highRisks} high-severity risk factor(s) were identified that warrant immediate attention.`;
-  else summary += 'No critical red flags were detected in this analysis.';
-
+  
   return {
-    data,
-    ratios,
-    risks,
-    insights,
+    data, ratios, risks, insights,
     healthStatus,
-    healthLabel: healthLabelText,
-    summary,
+    healthLabel: avgHealth >= 2.5 ? 'Strong Financial Health' : avgHealth >= 1.8 ? 'Fair Financial Health' : 'Weak Financial Health',
+    summary: `Based on offline regex analysis of ${data.companyName || 'the company'} (${data.reportYear}), revenue is ${data.revenue ? formatCurrency(data.revenue) : 'unknown'} with net income of ${data.netIncome ? formatCurrency(data.netIncome) : 'unknown'}. For more accurate insights, please configure the Gemini API in Settings.`
   };
 }
 
@@ -414,7 +605,7 @@ function renderDashboard(analysis, fileName) {
 
   // Company info
   dom.companyName.textContent = data.companyName || fileName.replace('.pdf', '').replace(/[_-]/g, ' ');
-  dom.reportPeriod.textContent = `Annual Report ${data.reportYear}`;
+  dom.reportPeriod.textContent = `Annual Report ${data.reportYear || new Date().getFullYear()}`;
   dom.healthBadge.className = `health-badge ${healthStatus}`;
   dom.healthLabel.textContent = healthLabel;
   dom.analysisDate.textContent = `Analyzed on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`;
@@ -443,7 +634,7 @@ function renderDashboard(analysis, fileName) {
   `).join('');
 
   // Ratios
-  const ratioEntries = Object.values(ratios);
+  const ratioEntries = Object.values(ratios || {});
   dom.ratiosGrid.innerHTML = ratioEntries.map(r => `
     <div class="ratio-item">
       <div class="ratio-header">
@@ -451,15 +642,15 @@ function renderDashboard(analysis, fileName) {
         <span class="ratio-value">${r.value}</span>
       </div>
       <div class="ratio-bar-bg">
-        <div class="ratio-bar ${r.status === 'poor' ? 'danger' : r.status === 'fair' ? 'warning' : ''}" style="width: ${r.barPercent}%"></div>
+        <div class="ratio-bar ${r.status === 'poor' ? 'danger' : r.status === 'fair' ? 'warning' : ''}" style="width: ${r.barPercent || 50}%"></div>
       </div>
       <span class="ratio-interpretation">${r.interpretation}</span>
     </div>
   `).join('');
 
   // Risks
-  risks.sort((a, b) => { const order = { high: 0, medium: 1, low: 2 }; return order[a.severity] - order[b.severity]; });
-  dom.riskList.innerHTML = risks.map(r => `
+  (risks || []).sort((a, b) => { const order = { high: 0, medium: 1, low: 2 }; return order[a.severity] - order[b.severity]; });
+  dom.riskList.innerHTML = (risks || []).map(r => `
     <div class="risk-item ${r.severity}">
       <span class="risk-severity">${r.severity}</span>
       <div class="risk-content">
@@ -470,7 +661,7 @@ function renderDashboard(analysis, fileName) {
   `).join('');
 
   // Insights
-  dom.insightsGrid.innerHTML = insights.map(i => `
+  dom.insightsGrid.innerHTML = (insights || []).map(i => `
     <div class="insight-item">
       <div class="insight-icon ${i.type}">${i.icon}</div>
       <div class="insight-text">${i.text}</div>
@@ -507,18 +698,11 @@ function renderDashboard(analysis, fileName) {
 let chartInstances = [];
 
 function renderCharts(data) {
-  // Destroy previous charts
   chartInstances.forEach(c => c.destroy());
   chartInstances = [];
 
   const chartColors = {
-    green: '#34d399',
-    cyan: '#06b6d4',
-    purple: '#818cf8',
-    pink: '#f472b6',
-    orange: '#f59e0b',
-    greenBg: 'rgba(52,211,153,0.15)',
-    cyanBg: 'rgba(6,182,212,0.15)',
+    green: '#34d399', cyan: '#06b6d4', purple: '#818cf8', pink: '#f472b6', orange: '#f59e0b',
   };
 
   Chart.defaults.color = '#94a3b8';
@@ -530,33 +714,12 @@ function renderCharts(data) {
   if (data.revenue || data.netIncome) {
     const labels = [];
     const revenueData = [];
-    const expenseData = [];
 
-    if (data.revenue) {
-      labels.push('Revenue');
-      revenueData.push(data.revenue / 1e6);
-      expenseData.push(data.revenue && data.netIncome ? (data.revenue - data.netIncome) / 1e6 : 0);
-    }
-    if (data.grossProfit) {
-      labels.push('Gross Profit');
-      revenueData.push(data.grossProfit / 1e6);
-      expenseData.push(data.revenue ? (data.revenue - data.grossProfit) / 1e6 : 0);
-    }
-    if (data.operatingIncome) {
-      labels.push('Operating Income');
-      revenueData.push(data.operatingIncome / 1e6);
-      expenseData.push(0);
-    }
-    if (data.ebitda) {
-      labels.push('EBITDA');
-      revenueData.push(data.ebitda / 1e6);
-      expenseData.push(0);
-    }
-    if (data.netIncome) {
-      labels.push('Net Income');
-      revenueData.push(data.netIncome / 1e6);
-      expenseData.push(0);
-    }
+    if (data.revenue) { labels.push('Revenue'); revenueData.push(data.revenue / 1e6); }
+    if (data.grossProfit) { labels.push('Gross Profit'); revenueData.push(data.grossProfit / 1e6); }
+    if (data.ebitda) { labels.push('EBITDA'); revenueData.push(data.ebitda / 1e6); }
+    if (data.operatingIncome) { labels.push('Operating Income'); revenueData.push(data.operatingIncome / 1e6); }
+    if (data.netIncome) { labels.push('Net Income'); revenueData.push(data.netIncome / 1e6); }
 
     const c1 = new Chart(revenueCtx, {
       type: 'bar',
@@ -567,7 +730,6 @@ function renderCharts(data) {
           data: revenueData,
           backgroundColor: [chartColors.green, chartColors.cyan, chartColors.purple, chartColors.orange, chartColors.pink],
           borderRadius: 8,
-          borderSkipped: false,
         }],
       },
       options: {
@@ -576,22 +738,13 @@ function renderCharts(data) {
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: 'rgba(17,24,39,0.95)',
-            titleColor: '#f1f5f9',
-            bodyColor: '#94a3b8',
-            borderColor: 'rgba(52,211,153,0.2)',
-            borderWidth: 1,
-            padding: 12,
-            cornerRadius: 10,
+            backgroundColor: 'rgba(17,24,39,0.95)', titleColor: '#f1f5f9', bodyColor: '#94a3b8',
+            borderColor: 'rgba(52,211,153,0.2)', borderWidth: 1, padding: 12, cornerRadius: 10,
             callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(1)}M` },
           },
         },
         scales: {
-          y: {
-            beginAtZero: true,
-            grid: { color: 'rgba(148,163,184,0.06)' },
-            ticks: { callback: v => `$${v}M` },
-          },
+          y: { beginAtZero: true, grid: { color: 'rgba(148,163,184,0.06)' }, ticks: { callback: v => `$${v}M` } },
           x: { grid: { display: false } },
         },
       },
@@ -601,46 +754,19 @@ function renderCharts(data) {
 
   // Asset composition doughnut
   const assetsCtx = document.getElementById('chart-assets');
-  if (data.totalAssets) {
+  if (data.totalAssets || data.totalLiabilities) {
     const pieLabels = [];
     const pieData = [];
     const pieColors = [];
 
-    if (data.currentAssets) {
-      pieLabels.push('Current Assets');
-      pieData.push(data.currentAssets);
-      pieColors.push(chartColors.green);
-    }
-    if (data.totalAssets && data.currentAssets) {
-      pieLabels.push('Non-Current Assets');
-      pieData.push(data.totalAssets - data.currentAssets);
-      pieColors.push(chartColors.cyan);
+    if (data.totalAssets) {
+      pieLabels.push('Total Assets'); pieData.push(data.totalAssets); pieColors.push(chartColors.green);
     }
     if (data.totalLiabilities) {
-      if (data.currentLiabilities) {
-        pieLabels.push('Current Liabilities');
-        pieData.push(data.currentLiabilities);
-        pieColors.push(chartColors.orange);
-        pieLabels.push('Non-Current Liabilities');
-        pieData.push(data.totalLiabilities - data.currentLiabilities);
-        pieColors.push(chartColors.pink);
-      } else {
-        pieLabels.push('Total Liabilities');
-        pieData.push(data.totalLiabilities);
-        pieColors.push(chartColors.orange);
-      }
+      pieLabels.push('Total Liabilities'); pieData.push(data.totalLiabilities); pieColors.push(chartColors.orange);
     }
     if (data.totalEquity) {
-      pieLabels.push("Shareholders' Equity");
-      pieData.push(data.totalEquity);
-      pieColors.push(chartColors.purple);
-    }
-
-    if (pieData.length === 0 && data.totalAssets) {
-      // Fallback: just show total assets as a single item
-      pieLabels.push('Total Assets');
-      pieData.push(data.totalAssets);
-      pieColors.push(chartColors.green);
+      pieLabels.push("Shareholders' Equity"); pieData.push(data.totalEquity); pieColors.push(chartColors.purple);
     }
 
     const c2 = new Chart(assetsCtx, {
@@ -648,35 +774,16 @@ function renderCharts(data) {
       data: {
         labels: pieLabels,
         datasets: [{
-          data: pieData,
-          backgroundColor: pieColors,
-          borderColor: 'rgba(10,14,23,0.8)',
-          borderWidth: 3,
-          hoverOffset: 8,
+          data: pieData, backgroundColor: pieColors, borderColor: 'rgba(10,14,23,0.8)', borderWidth: 3, hoverOffset: 8,
         }],
       },
       options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '65%',
+        responsive: true, maintainAspectRatio: false, cutout: '65%',
         plugins: {
-          legend: {
-            position: 'bottom',
-            labels: {
-              padding: 16,
-              usePointStyle: true,
-              pointStyleWidth: 10,
-              font: { size: 11 },
-            },
-          },
+          legend: { position: 'bottom', labels: { padding: 16, usePointStyle: true, pointStyleWidth: 10, font: { size: 11 } } },
           tooltip: {
-            backgroundColor: 'rgba(17,24,39,0.95)',
-            titleColor: '#f1f5f9',
-            bodyColor: '#94a3b8',
-            borderColor: 'rgba(52,211,153,0.2)',
-            borderWidth: 1,
-            padding: 12,
-            cornerRadius: 10,
+            backgroundColor: 'rgba(17,24,39,0.95)', titleColor: '#f1f5f9', bodyColor: '#94a3b8',
+            borderColor: 'rgba(52,211,153,0.2)', borderWidth: 1, padding: 12, cornerRadius: 10,
             callbacks: { label: ctx => `${ctx.label}: ${formatCurrencyShort(ctx.parsed)}` },
           },
         },
@@ -688,6 +795,7 @@ function renderCharts(data) {
 
 // ===== Formatting Utilities =====
 function formatCurrency(num) {
+  if (typeof num !== 'number') return num;
   if (num >= 1e12) return '$' + (num / 1e12).toFixed(2) + ' Trillion';
   if (num >= 1e9) return '$' + (num / 1e9).toFixed(2) + ' Billion';
   if (num >= 1e6) return '$' + (num / 1e6).toFixed(2) + ' Million';
@@ -696,6 +804,7 @@ function formatCurrency(num) {
 }
 
 function formatCurrencyShort(num) {
+  if (typeof num !== 'number') return num;
   if (num >= 1e12) return '$' + (num / 1e12).toFixed(1) + 'T';
   if (num >= 1e9) return '$' + (num / 1e9).toFixed(1) + 'B';
   if (num >= 1e6) return '$' + (num / 1e6).toFixed(1) + 'M';
@@ -705,44 +814,87 @@ function formatCurrencyShort(num) {
 
 // ===== Demo Data =====
 function runDemoAnalysis() {
-  showView('loading-view');
-  updateLoaderStep(1, 'Loading sample annual report...', 10);
-
   const demoData = {
-    companyName: 'Nextera Technologies Inc.',
-    reportYear: '2024',
-    revenue: 48200000000,
-    netIncome: 7840000000,
-    grossProfit: 21690000000,
-    operatingIncome: 12050000000,
-    ebitda: 15700000000,
-    totalAssets: 132500000000,
-    totalLiabilities: 85200000000,
-    totalEquity: 47300000000,
-    currentAssets: 24800000000,
-    currentLiabilities: 18600000000,
-    totalDebt: 42100000000,
-    cashFlow: 11200000000,
-    eps: 15.82,
+    "data": {
+      "companyName": "Nextera Technologies Inc.",
+      "reportYear": "2024",
+      "revenue": 48200000000,
+      "netIncome": 7840000000,
+      "grossProfit": 21690000000,
+      "operatingIncome": 12050000000,
+      "ebitda": 15700000000,
+      "totalAssets": 132500000000,
+      "totalLiabilities": 85200000000,
+      "totalEquity": 47300000000,
+      "currentAssets": 24800000000,
+      "currentLiabilities": 18600000000,
+      "totalDebt": 42100000000,
+      "cashFlow": 11200000000,
+      "eps": 15.82
+    },
+    "ratios": {
+      "roe": {
+        "name": "Return on Equity (ROE)",
+        "value": "16.58%",
+        "rawValue": 16.58,
+        "barPercent": 55,
+        "status": "good",
+        "interpretation": "Strong returns for shareholders indicating efficient capital allocation."
+      },
+      "debtToEquity": {
+        "name": "Debt-to-Equity Ratio",
+        "value": "1.80x",
+        "rawValue": 1.8,
+        "barPercent": 60,
+        "status": "fair",
+        "interpretation": "Moderate leverage, common in tech/infrastructure but warrants monitoring."
+      },
+      "currentRatio": {
+        "name": "Current Ratio",
+        "value": "1.33x",
+        "rawValue": 1.33,
+        "barPercent": 44,
+        "status": "fair",
+        "interpretation": "Adequate short-term liquidity to meet current obligations."
+      },
+      "netProfitMargin": {
+        "name": "Net Profit Margin",
+        "value": "16.27%",
+        "rawValue": 16.27,
+        "barPercent": 65,
+        "status": "good",
+        "interpretation": "Excellent profitability margins demonstrating strong pricing power."
+      }
+    },
+    "risks": [
+      {
+        "severity": "medium",
+        "title": "Supply Chain Vulnerability",
+        "desc": "The report highlights dependency on key semiconductor suppliers in geopolitical hotspots."
+      },
+      {
+        "severity": "low",
+        "title": "Regulatory Scrutiny",
+        "desc": "Increasing AI regulations may increase compliance costs in the EU markets."
+      }
+    ],
+    "insights": [
+      {
+        "type": "positive",
+        "icon": "🚀",
+        "text": "<strong>Revenue Growth:</strong> Top-line performance is exceptional with strong cash conversion."
+      },
+      {
+        "type": "neutral",
+        "icon": "⚖️",
+        "text": "<strong>Capital Structure:</strong> Balanced approach between equity and debt financing."
+      }
+    ],
+    "healthStatus": "good",
+    "healthLabel": "Strong Financial Health",
+    "summary": "Nextera Technologies Inc. (2024) demonstrates robust financial health with $48.2 Billion in revenue and excellent profitability margins (16.27% net margin). The company efficiently generates returns for shareholders (16.58% ROE) while maintaining manageable debt levels. Primary risks involve supply chain dependencies rather than immediate financial distress."
   };
-
-  const demoRawText = 'annual report of Nextera Technologies Inc. FY 2024 revenue net sales total assets total liabilities shareholders equity current assets current liabilities operating income EBITDA net income earnings per share operating cash flow total debt regulatory risk foreign currency risk litigation supply chain risk';
-
-  setTimeout(() => {
-    updateLoaderStep(2, 'Recognizing financial data...', 35);
-    setTimeout(() => {
-      updateLoaderStep(3, 'Computing financial ratios...', 55);
-      setTimeout(() => {
-        updateLoaderStep(4, 'Assessing risks...', 75);
-        setTimeout(() => {
-          updateLoaderStep(5, 'Generating report...', 95);
-          const analysis = analyzeFinancials(demoData, demoRawText);
-          setTimeout(() => {
-            updateLoaderStep(5, 'Complete!', 100);
-            setTimeout(() => renderDashboard(analysis, 'Nextera Technologies Annual Report 2024.pdf'), 300);
-          }, 400);
-        }, 500);
-      }, 400);
-    }, 500);
-  }, 600);
+  
+  currentAnalysis = demoData;
+  renderDashboard(demoData, 'Demo Report');
 }
