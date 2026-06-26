@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FinSight AI — Financial Statement Analyzer</title>
+  <title>myFinSightAI — Financial Statement Analyzer</title>
   <meta name="description" content="Upload annual reports and let AI summarize key insights, risks, and financial ratios. AI-powered financial statement analysis." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -14,6 +14,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -24,14 +25,55 @@
     <div class="mesh-orb mesh-orb-3"></div>
   </div>
 
+  <!-- ========== LOGIN CENTER VIEW ========== -->
+  <section id="login-center-view" class="view active">
+    <div class="login-center-wrapper">
+      <div class="login-box">
+        <div class="brand-icon" style="margin: 0 auto 20px auto; transform: scale(1.5);">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="16" width="5" height="10" rx="1.5" fill="url(#g1)"/><rect x="9" y="10" width="5" height="16" rx="1.5" fill="url(#g2)"/><rect x="16" y="6" width="5" height="20" rx="1.5" fill="url(#g3)"/><rect x="23" y="2" width="5" height="24" rx="1.5" fill="url(#g4)"/><defs><linearGradient id="g1" x1="4.5" y1="16" x2="4.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g2" x1="11.5" y1="10" x2="11.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g3" x1="18.5" y1="6" x2="18.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g4" x1="25.5" y1="2" x2="25.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs></svg>
+        </div>
+        <h1 class="login-title">Welcome to myFinSightAI</h1>
+        <p class="login-subtitle">Sign in to access your secure financial dashboard and save reports to the cloud.</p>
+        
+        <div class="auth-tabs" style="margin-top: 30px;">
+          <button class="auth-tab active" id="center-tab-login">Login</button>
+          <button class="auth-tab" id="center-tab-signup">Sign Up</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" id="center-auth-email" class="form-input" placeholder="you@example.com" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="center-auth-password" class="form-input" placeholder="••••••••" />
+        </div>
+        
+        <button id="center-auth-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 12px; justify-content: center;">Sign In</button>
+        
+        <div style="text-align: center; margin: 24px 0; color: var(--text-muted); font-size: 0.85rem; position: relative;">
+          <span style="background: var(--bg-card); padding: 0 10px; position: relative; z-index: 2;">OR</span>
+          <div style="position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border-subtle); z-index: 1;"></div>
+        </div>
+        
+        <button id="center-auth-google-btn" class="btn btn-outline-sm" style="width: 100%; justify-content: center; height: 44px; font-size: 1rem;">
+          <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Continue with Google
+        </button>
+
+        <button id="guest-mode-btn" class="btn btn-ghost" style="width: 100%; margin-top: 16px; justify-content: center; font-size: 0.9rem; color: var(--text-secondary);">Continue as Guest</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ========== LANDING / UPLOAD VIEW ========== -->
-  <section id="landing-view" class="view active">
+  <section id="landing-view" class="view">
     <nav class="navbar">
       <div class="nav-brand">
         <div class="brand-icon">
           <svg width="28" height="28" viewBox="0 0 28 28" fill="none"><rect x="2" y="16" width="5" height="10" rx="1.5" fill="url(#g1)"/><rect x="9" y="10" width="5" height="16" rx="1.5" fill="url(#g2)"/><rect x="16" y="6" width="5" height="20" rx="1.5" fill="url(#g3)"/><rect x="23" y="2" width="5" height="24" rx="1.5" fill="url(#g4)"/><defs><linearGradient id="g1" x1="4.5" y1="16" x2="4.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g2" x1="11.5" y1="10" x2="11.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g3" x1="18.5" y1="6" x2="18.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient><linearGradient id="g4" x1="25.5" y1="2" x2="25.5" y2="26" gradientUnits="userSpaceOnUse"><stop stop-color="#34d399"/><stop offset="1" stop-color="#06b6d4"/></linearGradient></defs></svg>
         </div>
-        <span class="brand-text">FinSight<span class="brand-ai">AI</span></span>
+        <span class="brand-text">myFinSight<span class="brand-ai">AI</span></span>
       </div>
       <div class="nav-links">
         <a href="#features" class="nav-link">Features</a>
@@ -162,7 +204,7 @@
     <!-- Examples Section -->
     <div id="examples" class="how-section" style="margin-top: 40px; border-top: 1px solid var(--border-subtle); padding-top: 60px;">
       <h2 class="section-title">Example Analyses</h2>
-      <p style="text-align: center; color: var(--text-secondary); margin-bottom: 40px;">Explore what FinSight AI can do by viewing these sample reports.</p>
+      <p style="text-align: center; color: var(--text-secondary); margin-bottom: 40px;">Explore what myFinSightAI can do by viewing these sample reports.</p>
       <div class="steps-row" style="gap: 20px;">
         <div class="step-card" style="cursor: pointer; transition: transform 0.2s;" onclick="runDemoAnalysis('tech')">
           <div class="step-num" style="background: rgba(52, 211, 153, 0.1); color: var(--accent-1);">Tech</div>
@@ -184,9 +226,9 @@
 
     <!-- About Section -->
     <div id="about" class="how-section" style="margin-top: 40px; border-top: 1px solid var(--border-subtle); padding-top: 60px; max-width: 800px; margin-left: auto; margin-right: auto; text-align: left;">
-      <h2 class="section-title" style="text-align: center;">About FinSight AI</h2>
+      <h2 class="section-title" style="text-align: center;">About myFinSightAI</h2>
       <p style="color: var(--text-secondary); line-height: 1.8; font-size: 1.05rem; margin-bottom: 16px;">
-        FinSight AI is a cutting-edge financial analysis tool designed to bridge the gap between dense corporate annual reports and actionable insights. Built for investors, analysts, and students, it leverages advanced natural language processing to extract quantitative data from unstructured PDFs.
+        myFinSightAI is a premium, cutting-edge financial analysis tool designed to bridge the gap between dense corporate annual reports and actionable insights. Built for investors, analysts, and students, it leverages advanced natural language processing to extract quantitative data from unstructured PDFs.
       </p>
       <p style="color: var(--text-secondary); line-height: 1.8; font-size: 1.05rem; margin-bottom: 16px;">
         By connecting to <strong>Google's Gemini 2.0 Flash AI</strong>, the platform intelligently interprets financial jargon, computes critical ratios (like ROE and Debt-to-Equity), and assesses macroeconomic and company-specific risks—all within seconds. 
@@ -344,7 +386,7 @@
 
       <!-- Footer -->
       <footer class="dash-footer">
-        <p>Analysis generated by <strong>FinSight AI</strong> — AI-powered financial intelligence. Data extracted from uploaded documents. Always verify with official filings.</p>
+        <p>Analysis generated by <strong>myFinSightAI</strong> — Premium AI-powered financial intelligence. Data extracted from uploaded documents. Always verify with official filings.</p>
       </footer>
     </div>
   </section>
@@ -368,46 +410,21 @@
         <textarea id="firebase-config" class="form-input" rows="4" placeholder='{"apiKey": "...", "projectId": "..."}' style="resize:vertical"></textarea>
         <p class="form-hint">Paste your Firebase config object here to enable Cloud Authentication and Firestore Sync.</p>
       </div>
+      <div style="border-top: 1px solid var(--border-subtle); margin: 20px 0;"></div>
+      <div class="form-group">
+        <label class="form-label">EmailJS Keys (For Admin Alerts)</label>
+        <input type="text" id="emailjs-public" class="form-input" placeholder="Public Key" style="margin-bottom: 8px;" />
+        <input type="text" id="emailjs-service" class="form-input" placeholder="Service ID" style="margin-bottom: 8px;" />
+        <input type="text" id="emailjs-template" class="form-input" placeholder="Template ID" />
+        <p class="form-hint">Optional: Configure EmailJS to receive emails when new users sign up.</p>
+      </div>
       <div class="modal-footer">
         <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
       </div>
     </div>
   </div>
 
-  <!-- Auth Modal -->
-  <div id="auth-modal" class="modal-overlay">
-    <div class="modal-content" style="max-width: 400px;">
-      <div class="modal-header">
-        <h2 class="modal-title" id="auth-title">Sign In</h2>
-        <button class="modal-close" id="close-auth">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      
-      <div class="auth-tabs">
-        <button class="auth-tab active" id="tab-login">Login</button>
-        <button class="auth-tab" id="tab-signup">Sign Up</button>
-      </div>
 
-      <div class="form-group">
-        <label class="form-label">Email</label>
-        <input type="email" id="auth-email" class="form-input" placeholder="you@example.com" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Password</label>
-        <input type="password" id="auth-password" class="form-input" placeholder="••••••••" />
-      </div>
-      
-      <button id="auth-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 12px; justify-content: center;">Sign In</button>
-      
-      <div style="text-align: center; margin: 20px 0; color: var(--text-muted); font-size: 0.85rem;">OR</div>
-      
-      <button id="auth-google-btn" class="btn btn-outline-sm" style="width: 100%; justify-content: center;">
-        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-        Continue with Google
-      </button>
-    </div>
-  </div>
 
   <div id="toast-container" class="toast-container"></div>
 

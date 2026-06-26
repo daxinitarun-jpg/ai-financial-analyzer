@@ -43,20 +43,23 @@ const dom = {
   shareBtn: document.getElementById('share-btn'),
   historySection: document.getElementById('history-section'),
   historyList: document.getElementById('history-list'),
-  // Auth DOM
+  // Auth DOM (Login Center)
   navLoginBtn: document.getElementById('nav-login-btn'),
   navProfileMenu: document.getElementById('nav-profile-menu'),
   userAvatar: document.getElementById('user-avatar'),
   logoutBtn: document.getElementById('logout-btn'),
-  authModal: document.getElementById('auth-modal'),
-  closeAuth: document.getElementById('close-auth'),
-  tabLogin: document.getElementById('tab-login'),
-  tabSignup: document.getElementById('tab-signup'),
-  authEmail: document.getElementById('auth-email'),
-  authPassword: document.getElementById('auth-password'),
-  authSubmitBtn: document.getElementById('auth-submit-btn'),
-  authGoogleBtn: document.getElementById('auth-google-btn'),
-  authTitle: document.getElementById('auth-title')
+  
+  centerTabLogin: document.getElementById('center-tab-login'),
+  centerTabSignup: document.getElementById('center-tab-signup'),
+  centerAuthEmail: document.getElementById('center-auth-email'),
+  centerAuthPassword: document.getElementById('center-auth-password'),
+  centerAuthSubmitBtn: document.getElementById('center-auth-submit-btn'),
+  centerAuthGoogleBtn: document.getElementById('center-auth-google-btn'),
+  guestModeBtn: document.getElementById('guest-mode-btn'),
+  
+  emailjsPublic: document.getElementById('emailjs-public'),
+  emailjsService: document.getElementById('emailjs-service'),
+  emailjsTemplate: document.getElementById('emailjs-template')
 };
 
 // Global state
@@ -65,6 +68,7 @@ let db = null;
 let auth = null;
 let currentUser = null;
 let authMode = 'login'; // 'login' or 'signup'
+let isGuestMode = false;
 
 // ===== View Switcher =====
 function showView(viewId) {
@@ -94,8 +98,17 @@ function showToast(message, type = 'success') {
 function loadSettings() {
   const apiKey = localStorage.getItem('geminiApiKey') || '';
   const fbConfig = localStorage.getItem('firebaseConfig') || '';
+  const ejPublic = localStorage.getItem('emailjsPublic') || '';
+  const ejService = localStorage.getItem('emailjsService') || '';
+  const ejTemplate = localStorage.getItem('emailjsTemplate') || '';
+  
   dom.geminiApiKey.value = apiKey;
   dom.firebaseConfig.value = fbConfig;
+  dom.emailjsPublic.value = ejPublic;
+  dom.emailjsService.value = ejService;
+  dom.emailjsTemplate.value = ejTemplate;
+  
+  if (ejPublic) emailjs.init(ejPublic);
   initFirebase();
 }
 
@@ -112,8 +125,14 @@ dom.closeSettings.addEventListener('click', () => {
 dom.saveSettingsBtn.addEventListener('click', () => {
   localStorage.setItem('geminiApiKey', dom.geminiApiKey.value.trim());
   localStorage.setItem('firebaseConfig', dom.firebaseConfig.value.trim());
+  localStorage.setItem('emailjsPublic', dom.emailjsPublic.value.trim());
+  localStorage.setItem('emailjsService', dom.emailjsService.value.trim());
+  localStorage.setItem('emailjsTemplate', dom.emailjsTemplate.value.trim());
+  
   dom.settingsModal.classList.remove('active');
   showToast('Settings saved successfully!');
+  
+  if (dom.emailjsPublic.value.trim()) emailjs.init(dom.emailjsPublic.value.trim());
   initFirebase();
 });
 
@@ -142,6 +161,7 @@ function initFirebase() {
     auth = null;
     updateAuthUI(null);
     loadHistory();
+    if (!isGuestMode && !window.location.hash) showView('login-center-view');
     return;
   }
   
@@ -160,10 +180,19 @@ function initFirebase() {
       currentUser = user;
       updateAuthUI(user);
       loadHistory(); // Load cloud history if logged in, else local
+      
+      if (user) {
+        if (document.getElementById('login-center-view').classList.contains('active')) {
+          showView('landing-view');
+        }
+      } else {
+        if (!isGuestMode && !window.location.hash) showView('login-center-view');
+      }
     });
   } catch (err) {
     console.error('Firebase init error:', err);
     showToast('Invalid Firebase config JSON', 'error');
+    if (!isGuestMode && !window.location.hash) showView('login-center-view');
   }
 }
 
@@ -179,6 +208,21 @@ function updateAuthUI(user) {
   }
 }
 
+function sendAdminAlert(email, method) {
+  const serviceID = localStorage.getItem('emailjsService');
+  const templateID = localStorage.getItem('emailjsTemplate');
+  const publicKey = localStorage.getItem('emailjsPublic');
+  
+  if (serviceID && templateID && publicKey) {
+    emailjs.send(serviceID, templateID, {
+      user_email: email,
+      auth_method: method,
+      app_name: "myFinSightAI"
+    }).then(() => console.log('Admin alert sent via EmailJS'))
+      .catch((err) => console.error('EmailJS Error:', err));
+  }
+}
+
 dom.navLoginBtn.addEventListener('click', () => {
   if (!auth) {
     showToast('Please configure Firebase to enable accounts.', 'warning');
@@ -186,35 +230,39 @@ dom.navLoginBtn.addEventListener('click', () => {
     dom.settingsModal.classList.add('active');
     return;
   }
-  dom.authModal.classList.add('active');
+  showView('login-center-view');
 });
 
-dom.closeAuth.addEventListener('click', () => {
-  dom.authModal.classList.remove('active');
+dom.guestModeBtn.addEventListener('click', () => {
+  isGuestMode = true;
+  showView('landing-view');
 });
 
-dom.tabLogin.addEventListener('click', () => {
+dom.centerTabLogin.addEventListener('click', () => {
   authMode = 'login';
-  dom.tabLogin.classList.add('active');
-  dom.tabSignup.classList.remove('active');
-  dom.authSubmitBtn.textContent = 'Sign In';
-  dom.authTitle.textContent = 'Sign In';
+  dom.centerTabLogin.classList.add('active');
+  dom.centerTabSignup.classList.remove('active');
+  dom.centerAuthSubmitBtn.textContent = 'Sign In';
 });
 
-dom.tabSignup.addEventListener('click', () => {
+dom.centerTabSignup.addEventListener('click', () => {
   authMode = 'signup';
-  dom.tabSignup.classList.add('active');
-  dom.tabLogin.classList.remove('active');
-  dom.authSubmitBtn.textContent = 'Sign Up';
-  dom.authTitle.textContent = 'Create Account';
+  dom.centerTabSignup.classList.add('active');
+  dom.centerTabLogin.classList.remove('active');
+  dom.centerAuthSubmitBtn.textContent = 'Sign Up';
 });
 
-dom.authSubmitBtn.addEventListener('click', async () => {
-  const email = dom.authEmail.value;
-  const pass = dom.authPassword.value;
+dom.centerAuthSubmitBtn.addEventListener('click', async () => {
+  const email = dom.centerAuthEmail.value;
+  const pass = dom.centerAuthPassword.value;
   if (!email || !pass) return showToast('Please enter email and password', 'error');
   
-  dom.authSubmitBtn.textContent = 'Loading...';
+  if (!auth) {
+    showToast('Firebase is not configured yet. Configure it in Settings.', 'error');
+    return;
+  }
+  
+  dom.centerAuthSubmitBtn.textContent = 'Loading...';
   try {
     if (authMode === 'login') {
       await auth.signInWithEmailAndPassword(email, pass);
@@ -222,23 +270,31 @@ dom.authSubmitBtn.addEventListener('click', async () => {
     } else {
       await auth.createUserWithEmailAndPassword(email, pass);
       showToast('Account created successfully!');
+      sendAdminAlert(email, 'Email/Password');
     }
-    dom.authModal.classList.remove('active');
-    dom.authEmail.value = '';
-    dom.authPassword.value = '';
+    dom.centerAuthEmail.value = '';
+    dom.centerAuthPassword.value = '';
+    showView('landing-view');
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
-    dom.authSubmitBtn.textContent = authMode === 'login' ? 'Sign In' : 'Sign Up';
+    dom.centerAuthSubmitBtn.textContent = authMode === 'login' ? 'Sign In' : 'Sign Up';
   }
 });
 
-dom.authGoogleBtn.addEventListener('click', async () => {
+dom.centerAuthGoogleBtn.addEventListener('click', async () => {
+  if (!auth) {
+    showToast('Firebase is not configured yet. Configure it in Settings.', 'error');
+    return;
+  }
   try {
     const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
+    const result = await auth.signInWithPopup(provider);
     showToast('Logged in with Google!');
-    dom.authModal.classList.remove('active');
+    if (result.additionalUserInfo && result.additionalUserInfo.isNewUser) {
+      sendAdminAlert(result.user.email, 'Google Sign-In');
+    }
+    showView('landing-view');
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -248,6 +304,7 @@ dom.logoutBtn.addEventListener('click', async () => {
   if (auth) {
     await auth.signOut();
     showToast('Signed out successfully');
+    showView('login-center-view');
   }
 });
 
