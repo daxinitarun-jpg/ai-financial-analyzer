@@ -10,8 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -314,11 +313,6 @@
         <label class="form-label">Google Gemini API Key</label>
         <input type="password" id="gemini-api-key" class="form-input" placeholder="AIzaSy..." />
         <p class="form-hint">Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. Saved locally.</p>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Firebase Config (JSON)</label>
-        <textarea id="firebase-config" class="form-input" rows="4" placeholder='{"apiKey": "...", "projectId": "..."}' style="resize:vertical"></textarea>
-        <p class="form-hint">Paste your Firebase config object here to enable cloud saving and sharing.</p>
       </div>
       <div class="modal-footer">
         <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
