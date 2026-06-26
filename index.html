@@ -11,6 +11,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore-compat.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -35,6 +38,15 @@
         <a href="#how-it-works" class="nav-link">How It Works</a>
         <a href="#" class="nav-link" id="nav-history">History</a>
         <a href="#" class="nav-link" id="nav-settings">Settings</a>
+        
+        <!-- Auth UI -->
+        <button id="nav-login-btn" class="btn btn-outline-sm" style="margin-left: 12px;">Sign In</button>
+        <div id="nav-profile-menu" class="profile-menu hidden">
+          <div class="avatar" id="user-avatar">?</div>
+          <div class="profile-dropdown">
+            <button id="logout-btn" class="dropdown-item">Sign Out</button>
+          </div>
+        </div>
       </div>
     </nav>
 
@@ -351,9 +363,49 @@
         <input type="password" id="gemini-api-key" class="form-input" placeholder="AIzaSy..." />
         <p class="form-hint">Get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>. Saved locally.</p>
       </div>
+      <div class="form-group">
+        <label class="form-label">Firebase Config (JSON)</label>
+        <textarea id="firebase-config" class="form-input" rows="4" placeholder='{"apiKey": "...", "projectId": "..."}' style="resize:vertical"></textarea>
+        <p class="form-hint">Paste your Firebase config object here to enable Cloud Authentication and Firestore Sync.</p>
+      </div>
       <div class="modal-footer">
         <button id="save-settings-btn" class="btn btn-primary">Save Settings</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="modal-overlay">
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2 class="modal-title" id="auth-title">Sign In</h2>
+        <button class="modal-close" id="close-auth">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login">Login</button>
+        <button class="auth-tab" id="tab-signup">Sign Up</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" id="auth-email" class="form-input" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="auth-password" class="form-input" placeholder="••••••••" />
+      </div>
+      
+      <button id="auth-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: 12px; justify-content: center;">Sign In</button>
+      
+      <div style="text-align: center; margin: 20px 0; color: var(--text-muted); font-size: 0.85rem;">OR</div>
+      
+      <button id="auth-google-btn" class="btn btn-outline-sm" style="width: 100%; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+        Continue with Google
+      </button>
     </div>
   </div>
 

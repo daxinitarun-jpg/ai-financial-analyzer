@@ -1,6 +1,6 @@
 /**
  * FinSight AI — Financial Statement Analyzer
- * Features: Client-side PDF parsing, Gemini AI Integration, Local Storage History,
+ * Features: Client-side PDF parsing, Gemini AI Integration, Firebase Auth & Sync,
  * URL-based Zero-Backend Sharing (lz-string), and Chart.js visualizations.
  */
 
@@ -31,21 +31,40 @@ const dom = {
   riskList: document.getElementById('risk-list'),
   insightsGrid: document.getElementById('insights-grid'),
   dataTbody: document.getElementById('data-tbody'),
-  // Modals & Navigation
+  // Navigation & Settings
   navSettings: document.getElementById('nav-settings'),
   navHistory: document.getElementById('nav-history'),
   settingsModal: document.getElementById('settings-modal'),
   closeSettings: document.getElementById('close-settings'),
   geminiApiKey: document.getElementById('gemini-api-key'),
+  firebaseConfig: document.getElementById('firebase-config'),
   saveSettingsBtn: document.getElementById('save-settings-btn'),
   toastContainer: document.getElementById('toast-container'),
   shareBtn: document.getElementById('share-btn'),
   historySection: document.getElementById('history-section'),
   historyList: document.getElementById('history-list'),
+  // Auth DOM
+  navLoginBtn: document.getElementById('nav-login-btn'),
+  navProfileMenu: document.getElementById('nav-profile-menu'),
+  userAvatar: document.getElementById('user-avatar'),
+  logoutBtn: document.getElementById('logout-btn'),
+  authModal: document.getElementById('auth-modal'),
+  closeAuth: document.getElementById('close-auth'),
+  tabLogin: document.getElementById('tab-login'),
+  tabSignup: document.getElementById('tab-signup'),
+  authEmail: document.getElementById('auth-email'),
+  authPassword: document.getElementById('auth-password'),
+  authSubmitBtn: document.getElementById('auth-submit-btn'),
+  authGoogleBtn: document.getElementById('auth-google-btn'),
+  authTitle: document.getElementById('auth-title')
 };
 
 // Global state
 let currentAnalysis = null;
+let db = null;
+let auth = null;
+let currentUser = null;
+let authMode = 'login'; // 'login' or 'signup'
 
 // ===== View Switcher =====
 function showView(viewId) {
@@ -74,11 +93,10 @@ function showToast(message, type = 'success') {
 // ===== Settings & Config =====
 function loadSettings() {
   const apiKey = localStorage.getItem('geminiApiKey') || '';
+  const fbConfig = localStorage.getItem('firebaseConfig') || '';
   dom.geminiApiKey.value = apiKey;
-  
-  // Make share button always visible since we use URL sharing now
-  dom.shareBtn.style.display = 'inline-flex';
-  loadLocalHistory();
+  dom.firebaseConfig.value = fbConfig;
+  initFirebase();
 }
 
 dom.navSettings.addEventListener('click', (e) => {
@@ -93,78 +111,237 @@ dom.closeSettings.addEventListener('click', () => {
 
 dom.saveSettingsBtn.addEventListener('click', () => {
   localStorage.setItem('geminiApiKey', dom.geminiApiKey.value.trim());
+  localStorage.setItem('firebaseConfig', dom.firebaseConfig.value.trim());
   dom.settingsModal.classList.remove('active');
   showToast('Settings saved successfully!');
+  initFirebase();
 });
 
-// ===== Local History =====
-function saveToHistory(analysis) {
+// ===== Firebase Init =====
+function initFirebase() {
+  const configStr = localStorage.getItem('firebaseConfig');
+  if (!configStr) {
+    // Revert to local-only history if no config
+    db = null;
+    auth = null;
+    updateAuthUI(null);
+    loadHistory();
+    return;
+  }
+  
   try {
-    let history = JSON.parse(localStorage.getItem('finsight_history') || '[]');
-    // Add to beginning, keep only last 10
-    history.unshift({
-      id: Date.now().toString(),
-      date: new Date().toISOString(),
-      analysis: analysis
+    const firebaseConfig = JSON.parse(configStr);
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    db = firebase.firestore();
+    auth = firebase.auth();
+    
+    // Listen for auth state
+    auth.onAuthStateChanged(user => {
+      currentUser = user;
+      updateAuthUI(user);
+      loadHistory(); // Load cloud history if logged in, else local
     });
-    history = history.slice(0, 10);
-    localStorage.setItem('finsight_history', JSON.stringify(history));
-    loadLocalHistory();
   } catch (err) {
-    console.error('Failed to save history', err);
+    console.error('Firebase init error:', err);
+    showToast('Invalid Firebase config JSON', 'error');
   }
 }
 
-function loadLocalHistory() {
-  try {
-    let historyStr = localStorage.getItem('finsight_history');
-    let history = historyStr ? JSON.parse(historyStr) : [];
-    
-    if (history.length === 0) {
-      const demos = getDemos();
-      const t = Date.now();
-      history = [
-        { id: (t).toString(), date: new Date(t).toISOString(), analysis: demos['tech'] },
-        { id: (t-1000).toString(), date: new Date(t-1000).toISOString(), analysis: demos['retail'] },
-        { id: (t-2000).toString(), date: new Date(t-2000).toISOString(), analysis: demos['energy'] }
-      ];
-      localStorage.setItem('finsight_history', JSON.stringify(history));
+// ===== Authentication UI & Logic =====
+function updateAuthUI(user) {
+  if (user) {
+    dom.navLoginBtn.classList.add('hidden');
+    dom.navProfileMenu.classList.remove('hidden');
+    dom.userAvatar.textContent = user.email ? user.email[0].toUpperCase() : 'U';
+  } else {
+    dom.navLoginBtn.classList.remove('hidden');
+    dom.navProfileMenu.classList.add('hidden');
+    // Also show sign in button only if Firebase is configured
+    if (!localStorage.getItem('firebaseConfig')) {
+      dom.navLoginBtn.classList.add('hidden');
     }
-    
-    dom.historySection.style.display = 'block';
-    dom.historyList.innerHTML = '';
-    
-    history.forEach(item => {
-      const data = item.analysis;
-      const dateStr = new Date(item.date).toLocaleDateString();
-      
-      const el = document.createElement('a');
-      el.className = 'history-item';
-      
-      // Compress for URL hash
-      const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(data));
-      el.href = `#data=${compressed}`;
-      
-      el.innerHTML = `
-        <div class="history-item-left">
-          <div class="history-title">${data.data.companyName || 'Unknown Company'}</div>
-          <div class="history-meta">FY ${data.data.reportYear || 'Unknown'} • Analyzed on ${dateStr}</div>
-        </div>
-        <div class="history-status" style="background: var(--${data.healthStatus === 'good' ? 'success' : data.healthStatus === 'fair' ? 'warning' : 'danger'}-bg); color: var(--${data.healthStatus === 'good' ? 'accent-1' : data.healthStatus === 'fair' ? 'warning' : 'danger'})">
-          ${data.healthLabel}
-        </div>
-      `;
-      
-      el.addEventListener('click', (e) => {
-        // Allow default anchor behavior to update URL hash, then load it
-        setTimeout(() => loadFromHash(), 100);
-      });
-      
-      dom.historyList.appendChild(el);
-    });
-  } catch (err) {
-    console.error('Error loading history:', err);
   }
+}
+
+dom.navLoginBtn.addEventListener('click', () => {
+  if (!auth) {
+    showToast('Configure Firebase Settings first', 'warning');
+    return;
+  }
+  dom.authModal.classList.add('active');
+});
+
+dom.closeAuth.addEventListener('click', () => {
+  dom.authModal.classList.remove('active');
+});
+
+dom.tabLogin.addEventListener('click', () => {
+  authMode = 'login';
+  dom.tabLogin.classList.add('active');
+  dom.tabSignup.classList.remove('active');
+  dom.authSubmitBtn.textContent = 'Sign In';
+  dom.authTitle.textContent = 'Sign In';
+});
+
+dom.tabSignup.addEventListener('click', () => {
+  authMode = 'signup';
+  dom.tabSignup.classList.add('active');
+  dom.tabLogin.classList.remove('active');
+  dom.authSubmitBtn.textContent = 'Sign Up';
+  dom.authTitle.textContent = 'Create Account';
+});
+
+dom.authSubmitBtn.addEventListener('click', async () => {
+  const email = dom.authEmail.value;
+  const pass = dom.authPassword.value;
+  if (!email || !pass) return showToast('Please enter email and password', 'error');
+  
+  dom.authSubmitBtn.textContent = 'Loading...';
+  try {
+    if (authMode === 'login') {
+      await auth.signInWithEmailAndPassword(email, pass);
+      showToast('Logged in successfully!');
+    } else {
+      await auth.createUserWithEmailAndPassword(email, pass);
+      showToast('Account created successfully!');
+    }
+    dom.authModal.classList.remove('active');
+    dom.authEmail.value = '';
+    dom.authPassword.value = '';
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    dom.authSubmitBtn.textContent = authMode === 'login' ? 'Sign In' : 'Sign Up';
+  }
+});
+
+dom.authGoogleBtn.addEventListener('click', async () => {
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithPopup(provider);
+    showToast('Logged in with Google!');
+    dom.authModal.classList.remove('active');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+});
+
+dom.logoutBtn.addEventListener('click', async () => {
+  if (auth) {
+    await auth.signOut();
+    showToast('Signed out successfully');
+  }
+});
+
+// ===== History Logic (Local vs Cloud) =====
+async function saveToHistory(analysis) {
+  if (currentUser && db) {
+    // Cloud Save
+    try {
+      await db.collection('users').doc(currentUser.uid).collection('analyses').add({
+        analysis: analysis,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      loadHistory(); // Refresh list
+    } catch (err) {
+      console.error('Cloud save failed', err);
+    }
+  } else {
+    // Local Save
+    try {
+      let history = JSON.parse(localStorage.getItem('finsight_history') || '[]');
+      history.unshift({
+        id: Date.now().toString(),
+        date: new Date().toISOString(),
+        analysis: analysis
+      });
+      history = history.slice(0, 10);
+      localStorage.setItem('finsight_history', JSON.stringify(history));
+      loadHistory();
+    } catch (err) {
+      console.error('Local save failed', err);
+    }
+  }
+}
+
+async function loadHistory() {
+  dom.historyList.innerHTML = '';
+  
+  if (currentUser && db) {
+    // Load Cloud History
+    try {
+      const snapshot = await db.collection('users').doc(currentUser.uid)
+        .collection('analyses').orderBy('createdAt', 'desc').limit(10).get();
+        
+      if (snapshot.empty) {
+        dom.historySection.style.display = 'none';
+        return;
+      }
+      
+      dom.historySection.style.display = 'block';
+      
+      snapshot.forEach(doc => {
+        const data = doc.data().analysis;
+        const dateObj = doc.data().createdAt ? doc.data().createdAt.toDate() : new Date();
+        renderHistoryItem(data, dateObj, true);
+      });
+    } catch (err) {
+      console.error('Error loading cloud history', err);
+    }
+  } else {
+    // Load Local History
+    try {
+      let historyStr = localStorage.getItem('finsight_history');
+      let history = historyStr ? JSON.parse(historyStr) : [];
+      
+      if (history.length === 0) {
+        // Pre-populate with demos for new unauthenticated users
+        const demos = getDemos();
+        const t = Date.now();
+        history = [
+          { id: (t).toString(), date: new Date(t).toISOString(), analysis: demos['tech'] },
+          { id: (t-1000).toString(), date: new Date(t-1000).toISOString(), analysis: demos['retail'] },
+          { id: (t-2000).toString(), date: new Date(t-2000).toISOString(), analysis: demos['energy'] }
+        ];
+        localStorage.setItem('finsight_history', JSON.stringify(history));
+      }
+      
+      dom.historySection.style.display = 'block';
+      history.forEach(item => {
+        renderHistoryItem(item.analysis, new Date(item.date), false);
+      });
+    } catch (err) {
+      console.error('Error loading local history:', err);
+    }
+  }
+}
+
+function renderHistoryItem(data, dateObj, isCloud) {
+  const dateStr = dateObj.toLocaleDateString();
+  const el = document.createElement('a');
+  el.className = 'history-item';
+  
+  // Compress for URL hash
+  const compressed = LZString.compressToEncodedURIComponent(JSON.stringify(data));
+  el.href = `#data=${compressed}`;
+  
+  el.innerHTML = `
+    <div class="history-item-left">
+      <div class="history-title">${data.data.companyName || 'Unknown Company'} ${isCloud ? '☁️' : ''}</div>
+      <div class="history-meta">FY ${data.data.reportYear || 'Unknown'} • Analyzed on ${dateStr}</div>
+    </div>
+    <div class="history-status" style="background: var(--${data.healthStatus === 'good' ? 'success' : data.healthStatus === 'fair' ? 'warning' : 'danger'}-bg); color: var(--${data.healthStatus === 'good' ? 'accent-1' : data.healthStatus === 'fair' ? 'warning' : 'danger'})">
+      ${data.healthLabel}
+    </div>
+  `;
+  
+  el.addEventListener('click', (e) => {
+    setTimeout(() => loadFromHash(), 100);
+  });
+  
+  dom.historyList.appendChild(el);
 }
 
 dom.navHistory.addEventListener('click', (e) => {
@@ -180,13 +357,8 @@ dom.shareBtn.addEventListener('click', async () => {
   dom.shareBtn.innerHTML = 'Creating Link...';
   
   try {
-    // Compress the entire analysis object into a URL-safe string
     const compressedData = LZString.compressToEncodedURIComponent(JSON.stringify(currentAnalysis));
-    
-    // Update the URL hash
     window.history.replaceState(null, null, `#data=${compressedData}`);
-    
-    // Copy to clipboard
     await navigator.clipboard.writeText(window.location.href);
     showToast('Share link copied to clipboard!');
   } catch (err) {
@@ -197,7 +369,7 @@ dom.shareBtn.addEventListener('click', async () => {
   }
 });
 
-// ===== App Initialization (Check URL Hash) =====
+// ===== App Initialization =====
 window.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   loadFromHash();
@@ -210,8 +382,7 @@ window.addEventListener('hashchange', () => {
 function loadFromHash() {
   const hash = window.location.hash;
   if (hash && hash.startsWith('#data=')) {
-    const compressedData = hash.substring(6); // Remove '#data='
-    
+    const compressedData = hash.substring(6);
     showView('loading-view');
     updateLoaderStep(1, 'Decompressing shared analysis...', 50);
     
@@ -219,7 +390,6 @@ function loadFromHash() {
       const jsonStr = LZString.decompressFromEncodedURIComponent(compressedData);
       if (jsonStr) {
         updateLoaderStep(5, 'Complete!', 100);
-        
         setTimeout(() => {
           currentAnalysis = JSON.parse(jsonStr);
           renderDashboard(currentAnalysis, 'Shared Report');
@@ -266,7 +436,7 @@ dom.newAnalysisBtn.addEventListener('click', () => {
 
 // ===== Process Uploaded File =====
 async function processFile(file) {
-  window.history.replaceState(null, null, window.location.pathname); // Clear hash
+  window.history.replaceState(null, null, window.location.pathname);
   showView('loading-view');
   updateLoaderStep(1, 'Extracting text from document...', 10);
 
@@ -276,7 +446,6 @@ async function processFile(file) {
 
     let fullText = '';
     const totalPages = pdf.numPages;
-    // Limit to first 20 pages to avoid context limits / memory issues
     const pagesToRead = Math.min(totalPages, 20);
 
     for (let i = 1; i <= pagesToRead; i++) {
@@ -289,7 +458,6 @@ async function processFile(file) {
 
     updateLoaderStep(2, 'Analyzing with AI...', 45);
     
-    // Check if Gemini API key is available
     const apiKey = localStorage.getItem('geminiApiKey');
     let analysis;
     
@@ -315,7 +483,7 @@ async function processFile(file) {
     await delay(300);
 
     currentAnalysis = analysis;
-    saveToHistory(analysis); // Save to local history
+    saveToHistory(analysis); 
     
     renderDashboard(analysis, file.name);
   } catch (err) {
@@ -326,9 +494,7 @@ async function processFile(file) {
 
 // ===== Gemini AI Integration =====
 async function analyzeWithGemini(text, apiKey, fileName) {
-  // Truncate text to avoid token limits (keep first ~30k chars)
   const truncatedText = text.substring(0, 30000);
-  
   const systemPrompt = `You are an expert financial analyst AI. Extract financial data, compute key ratios, identify risks, and generate insights from the provided annual report text. Return ONLY a valid JSON object matching the exact structure requested, with no markdown formatting or markdown code blocks (do not wrap in \`\`\`json).`;
   
   const userPrompt = `
