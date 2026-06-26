@@ -176,16 +176,14 @@ function updateAuthUI(user) {
   } else {
     dom.navLoginBtn.classList.remove('hidden');
     dom.navProfileMenu.classList.add('hidden');
-    // Also show sign in button only if Firebase is configured
-    if (!localStorage.getItem('firebaseConfig')) {
-      dom.navLoginBtn.classList.add('hidden');
-    }
   }
 }
 
 dom.navLoginBtn.addEventListener('click', () => {
   if (!auth) {
-    showToast('Configure Firebase Settings first', 'warning');
+    showToast('Please configure Firebase to enable accounts.', 'warning');
+    loadSettings();
+    dom.settingsModal.classList.add('active');
     return;
   }
   dom.authModal.classList.add('active');
