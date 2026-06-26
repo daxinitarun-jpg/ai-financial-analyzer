@@ -117,11 +117,18 @@ function saveToHistory(analysis) {
 
 function loadLocalHistory() {
   try {
-    const history = JSON.parse(localStorage.getItem('finsight_history') || '[]');
+    let historyStr = localStorage.getItem('finsight_history');
+    let history = historyStr ? JSON.parse(historyStr) : [];
     
     if (history.length === 0) {
-      dom.historySection.style.display = 'none';
-      return;
+      const demos = getDemos();
+      const t = Date.now();
+      history = [
+        { id: (t).toString(), date: new Date(t).toISOString(), analysis: demos['tech'] },
+        { id: (t-1000).toString(), date: new Date(t-1000).toISOString(), analysis: demos['retail'] },
+        { id: (t-2000).toString(), date: new Date(t-2000).toISOString(), analysis: demos['energy'] }
+      ];
+      localStorage.setItem('finsight_history', JSON.stringify(history));
     }
     
     dom.historySection.style.display = 'block';
@@ -729,8 +736,8 @@ function formatCurrencyShort(num) {
 }
 
 // ===== Demo Data =====
-function runDemoAnalysis(type = 'tech') {
-  const demos = {
+function getDemos() {
+  return {
     'tech': {
       "data": { "companyName": "Nextera Technologies Inc.", "reportYear": "2024", "revenue": 48200000000, "netIncome": 7840000000, "grossProfit": 21690000000, "operatingIncome": 12050000000, "ebitda": 15700000000, "totalAssets": 132500000000, "totalLiabilities": 85200000000, "totalEquity": 47300000000, "currentAssets": 24800000000, "currentLiabilities": 18600000000, "totalDebt": 42100000000, "cashFlow": 11200000000, "eps": 15.82 },
       "ratios": {
@@ -781,7 +788,10 @@ function runDemoAnalysis(type = 'tech') {
       "healthStatus": "fair", "healthLabel": "Fair Financial Health", "summary": "EcoPower Utilities remains stable with consistent 11% margins and strong cash flow, offset by significant structural debt."
     }
   };
-  
+}
+
+function runDemoAnalysis(type = 'tech') {
+  const demos = getDemos();
   const demoData = demos[type] || demos['tech'];
   
   currentAnalysis = demoData;
