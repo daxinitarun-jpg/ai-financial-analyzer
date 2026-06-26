@@ -118,6 +118,22 @@ dom.saveSettingsBtn.addEventListener('click', () => {
 });
 
 // ===== Firebase Init =====
+function parseFirebaseConfig(str) {
+  try {
+    return JSON.parse(str);
+  } catch (err) {
+    const match = str.match(/{[\s\S]*}/);
+    if (match) {
+      try {
+        return (new Function("return " + match[0]))();
+      } catch (err2) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 function initFirebase() {
   const configStr = localStorage.getItem('firebaseConfig');
   if (!configStr) {
@@ -130,7 +146,9 @@ function initFirebase() {
   }
   
   try {
-    const firebaseConfig = JSON.parse(configStr);
+    const firebaseConfig = parseFirebaseConfig(configStr);
+    if (!firebaseConfig) throw new Error("Invalid config format");
+    
     if (!firebase.apps.length) {
       firebase.initializeApp(firebaseConfig);
     }
